@@ -10,7 +10,6 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-const auth = firebase.auth(); // Initialiser Firebase Auth
 
 // Variables globales
 let appData = {
@@ -26,8 +25,7 @@ let appData = {
 
 let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
-let syncKey = 'institut_coran_shared_' + new Date().getFullYear();
-let currentUser = null; // Pour stocker l'utilisateur connecté
+let syncKey = 'institut_coran_shared_' + new Date().getFullYear(); // Clé partagée
 
 const PRICING = {
     groupe_2h: 32,
@@ -41,282 +39,8 @@ const PRICING = {
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Application chargée');
 
-    // Vérifier l'état d'authentification
-    auth.onAuthStateChanged((user) => {
-        if (user) {
-            // L'utilisateur est connecté
-            currentUser = user;
-            console.log('Utilisateur connecté:', user.email);
-            showMainApp();
-            initializeApp();
-        } else {
-            // L'utilisateur n'est pas connecté
-            currentUser = null;
-            console.log('Utilisateur non connecté');
-            showLoginForm();
-        }
-    });
-});
-
-// Afficher le formulaire de connexion
-function showLoginForm() {
-    const mainApp = document.getElementById('mainApp');
-    const loginForm = document.getElementById('loginForm');
-
-    if (mainApp) mainApp.style.display = 'none';
-    if (loginForm) {
-        loginForm.style.display = 'block';
-    } else {
-        // Créer le formulaire de connexion s'il n'existe pas
-        createLoginForm();
-    }
-}
-
-// Créer le formulaire de connexion
-function createLoginForm() {
-    const loginHTML = `
-        <div id="loginForm" class="login-container">
-            <div class="login-box">
-                <h2>🕌 Institut Coran - Connexion</h2>
-                <form id="authForm">
-                    <div class="form-group">
-                        <input type="email" id="emailInput" placeholder="Email" required>
-                    </div>
-                    <div class="form-group">
-                        <input type="password" id="passwordInput" placeholder="Mot de passe" required>
-                    </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">Se connecter</button>
-                        <button type="button" class="btn btn-secondary" onclick="toggleAuthMode()">
-                            Créer un compte
-                        </button>
-                    </div>
-                </form>
-                <div id="authError" class="error-message" style="display: none;"></div>
-                <div id="authStatus" class="status-message"></div>
-            </div>
-        </div>
-    `;
-
-    document.body.insertAdjacentHTML('afterbegin', loginHTML);
-
-    // Ajouter les styles
-    addAuthStyles();
-
-    // Ajouter les événements
-    document.getElementById('authForm').addEventListener('submit', handleAuth);
-}
-
-// Ajouter les styles pour l'authentification
-function addAuthStyles() {
-    const style = document.createElement('style');
-    style.textContent = `
-        .login-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-        }
-        
-        .login-box {
-            background: white;
-            padding: 2rem;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-        }
-        
-        .login-box h2 {
-            margin-bottom: 1.5rem;
-            color: #333;
-        }
-        
-        .login-box .form-group {
-            margin-bottom: 1rem;
-        }
-        
-        .login-box input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-            box-sizing: border-box;
-        }
-        
-        .login-box .form-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 1.5rem;
-        }
-        
-        .login-box .btn {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s;
-        }
-        
-        .login-box .btn-primary {
-            background: #007bff;
-            color: white;
-        }
-        
-        .login-box .btn-primary:hover {
-            background: #0056b3;
-        }
-        
-        .login-box .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        
-        .login-box .btn-secondary:hover {
-            background: #545b62;
-        }
-        
-        .error-message {
-            color: #dc3545;
-            margin-top: 1rem;
-            padding: 10px;
-            background: #f8d7da;
-            border-radius: 5px;
-        }
-        
-        .status-message {
-            margin-top: 1rem;
-            padding: 10px;
-            border-radius: 5px;
-        }
-    `;
-
-    document.head.appendChild(style);
-}
-
-// Gérer l'authentification
-let isSignUpMode = false;
-
-async function handleAuth(event) {
-    event.preventDefault();
-
-    const email = document.getElementById('emailInput').value;
-    const password = document.getElementById('passwordInput').value;
-    const errorDiv = document.getElementById('authError');
-    const statusDiv = document.getElementById('authStatus');
-
-    errorDiv.style.display = 'none';
-    statusDiv.textContent = isSignUpMode ? 'Création du compte...' : 'Connexion...';
-    statusDiv.style.background = '#d1ecf1';
-    statusDiv.style.color = '#0c5460';
-
-    try {
-        if (isSignUpMode) {
-            // Créer un nouveau compte
-            await auth.createUserWithEmailAndPassword(email, password);
-            statusDiv.textContent = 'Compte créé avec succès !';
-            statusDiv.style.background = '#d4edda';
-            statusDiv.style.color = '#155724';
-        } else {
-            // Se connecter
-            await auth.signInWithEmailAndPassword(email, password);
-            statusDiv.textContent = 'Connexion réussie !';
-            statusDiv.style.background = '#d4edda';
-            statusDiv.style.color = '#155724';
-        }
-    } catch (error) {
-        console.error('Erreur d\'authentification:', error);
-
-        let errorMessage = 'Erreur inconnue';
-        switch (error.code) {
-            case 'auth/user-not-found':
-                errorMessage = 'Aucun utilisateur trouvé avec cet email';
-                break;
-            case 'auth/wrong-password':
-                errorMessage = 'Mot de passe incorrect';
-                break;
-            case 'auth/email-already-in-use':
-                errorMessage = 'Un compte existe déjà avec cet email';
-                break;
-            case 'auth/weak-password':
-                errorMessage = 'Le mot de passe doit contenir au moins 6 caractères';
-                break;
-            case 'auth/invalid-email':
-                errorMessage = 'Email invalide';
-                break;
-            default:
-                errorMessage = error.message;
-        }
-
-        errorDiv.textContent = errorMessage;
-        errorDiv.style.display = 'block';
-        statusDiv.textContent = '';
-    }
-}
-
-// Basculer entre connexion et inscription
-function toggleAuthMode() {
-    isSignUpMode = !isSignUpMode;
-    const submitBtn = document.querySelector('#authForm button[type="submit"]');
-    const toggleBtn = document.querySelector('#authForm .btn-secondary');
-
-    if (isSignUpMode) {
-        submitBtn.textContent = 'Créer un compte';
-        toggleBtn.textContent = 'Se connecter';
-    } else {
-        submitBtn.textContent = 'Se connecter';
-        toggleBtn.textContent = 'Créer un compte';
-    }
-
-    // Effacer les messages d'erreur
-    document.getElementById('authError').style.display = 'none';
-    document.getElementById('authStatus').textContent = '';
-}
-
-// Afficher l'application principale
-function showMainApp() {
-    const loginForm = document.getElementById('loginForm');
-    const mainApp = document.getElementById('mainApp');
-
-    if (loginForm) loginForm.style.display = 'none';
-    if (mainApp) {
-        mainApp.style.display = 'block';
-    } else {
-        // L'application principale devrait déjà exister dans le HTML
-        console.log('Element mainApp introuvable - assurez-vous que votre HTML principal a l\'ID "mainApp"');
-    }
-}
-
-// Déconnexion
-async function logout() {
-    if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
-        try {
-            await auth.signOut();
-            showNotification('👋 Déconnexion réussie !');
-        } catch (error) {
-            console.error('Erreur de déconnexion:', error);
-            showNotification('❌ Erreur lors de la déconnexion');
-        }
-    }
-}
-
-// Initialiser l'application après connexion
-async function initializeApp() {
-    console.log('Initialisation de l\'application...');
-
     // Afficher un indicateur de chargement
-    const syncStatus = document.getElementById('syncStatus');
-    if (syncStatus) syncStatus.textContent = 'Initialisation...';
+    document.getElementById('syncStatus').textContent = 'Initialisation...';
 
     await loadStoredData();
     updateCurrentMonthDisplay();
@@ -324,150 +48,18 @@ async function initializeApp() {
     refreshAllDisplays();
     setupEventListeners();
 
-    // Ajouter le bouton de déconnexion s'il n'existe pas
-    addLogoutButton();
+    // Activer l'écoute en temps réel (optionnel - commentez si vous ne voulez pas)
+    // setupRealtimeListener();
 
     console.log('Application initialisée');
-}
-
-// Ajouter le bouton de déconnexion
-function addLogoutButton() {
-    const header = document.querySelector('.header');
-    if (header && !document.getElementById('logoutBtn')) {
-        const userInfo = document.createElement('div');
-        userInfo.className = 'user-info';
-        userInfo.innerHTML = `
-            <span>👤 ${currentUser.email}</span>
-            <button id="logoutBtn" class="btn btn-outline" onclick="logout()">Se déconnecter</button>
-        `;
-        header.appendChild(userInfo);
-
-        // Ajouter les styles pour l'info utilisateur
-        const style = document.createElement('style');
-        style.textContent = `
-            .user-info {
-                display: flex;
-                align-items: center;
-                gap: 15px;
-                margin-left: auto;
-            }
-            
-            .user-info span {
-                color: #6c757d;
-                font-size: 14px;
-            }
-            
-            .btn-outline {
-                background: transparent;
-                border: 1px solid #6c757d;
-                color: #6c757d;
-                padding: 5px 15px;
-                border-radius: 20px;
-                font-size: 12px;
-            }
-            
-            .btn-outline:hover {
-                background: #6c757d;
-                color: white;
-            }
-        `;
-        document.head.appendChild(style);
-    }
-}
-
-// Modifier la fonction saveData pour inclure l'authentification
-async function saveData() {
-    // Vérifier que l'utilisateur est connecté
-    if (!currentUser) {
-        console.error('Utilisateur non connecté - impossible de sauvegarder');
-        return;
-    }
-
-    try {
-        const docRef = db.collection('institut_data').doc('main_data');
-        await docRef.set({
-            ...appData,
-            lastUpdate: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedBy: currentUser.uid // Ajouter l'ID de l'utilisateur
-        });
-
-        const syncStatus = document.getElementById('syncStatus');
-        if (syncStatus) {
-            syncStatus.textContent = 'Synchronisé ✅';
-            syncStatus.style.color = '#28a745';
-        }
-        console.log('Données sauvegardées dans Firebase');
-    } catch (error) {
-        console.error('Erreur de sauvegarde Firebase:', error);
-        const syncStatus = document.getElementById('syncStatus');
-        if (syncStatus) {
-            syncStatus.textContent = 'Erreur sync ❌';
-            syncStatus.style.color = '#dc3545';
-        }
-
-        // Fallback vers localStorage en cas d'erreur
-        try {
-            localStorage.setItem(syncKey, JSON.stringify(appData));
-            console.log('Sauvegarde locale effectuée en fallback');
-        } catch (localError) {
-            console.error('Erreur sauvegarde locale:', localError);
-        }
-    }
-}
-
-// Modifier la fonction loadStoredData pour inclure l'authentification
-async function loadStoredData() {
-    // Vérifier que l'utilisateur est connecté
-    if (!currentUser) {
-        console.error('Utilisateur non connecté - impossible de charger les données');
-        return;
-    }
-
-    try {
-        const syncStatus = document.getElementById('syncStatus');
-        if (syncStatus) syncStatus.textContent = 'Chargement...';
-
-        const docRef = db.collection('institut_data').doc('main_data');
-        const doc = await docRef.get();
-
-        if (doc.exists) {
-            const data = doc.data();
-            appData = {
-                students: data.students || [],
-                teachers: data.teachers || [],
-                payments: data.payments || [],
-                products: data.products || [],
-                sales: data.sales || [],
-                expenses: data.expenses || [],
-                teacherPayments: data.teacherPayments || [],
-                monthlyData: data.monthlyData || {}
-            };
-            console.log('Données chargées depuis Firebase:', appData);
-            if (syncStatus) {
-                syncStatus.textContent = 'Synchronisé ✅';
-                syncStatus.style.color = '#28a745';
-            }
-        } else {
-            await loadFromLocalStorage();
-        }
-    } catch (error) {
-        console.error('Erreur de chargement Firebase:', error);
-        const syncStatus = document.getElementById('syncStatus');
-        if (syncStatus) {
-            syncStatus.textContent = 'Mode hors-ligne';
-            syncStatus.style.color = '#ffa500';
-        }
-        await loadFromLocalStorage();
-    }
-}
-
-// Le reste de votre code reste identique...
+});
 async function forceSyncNow() {
-    const syncStatus = document.getElementById('syncStatus');
-    if (syncStatus) syncStatus.textContent = 'Synchronisation...';
+    document.getElementById('syncStatus').textContent = 'Synchronisation...';
     await saveData();
     showNotification('🔄 Synchronisation forcée !');
 }
+
+
 
 // Configuration des événements
 function setupEventListeners() {
@@ -590,8 +182,7 @@ function calculateStudentPrice() {
     if (reduction > 0) {
         priceText += ` (prix initial: ${fullMonthlyPrice}€ - réduction: ${reduction}€)`;
     }
-    const fullMonthlyPriceElement = document.getElementById('fullMonthlyPrice');
-    if (fullMonthlyPriceElement) fullMonthlyPriceElement.value = priceText;
+    document.getElementById('fullMonthlyPrice').value = priceText;
 
     if (registrationDate && selectedDays.length > 0 && finalMonthlyPrice > 0) {
         const prorataData = calculateProrata(registrationDate, selectedDays, finalMonthlyPrice, formula, hours);
@@ -604,8 +195,7 @@ function calculateStudentPrice() {
             finalProrataAmount = Math.max(0, prorataData.amount - prorataReduction);
         }
 
-        const prorataElement = document.getElementById('prorataPrice');
-        if (prorataElement) prorataElement.value = `${finalProrataAmount}€`;
+        document.getElementById('prorataPrice').value = `${finalProrataAmount}€`;
 
         let details = prorataData.details;
         if (reduction > 0) details += ` - réduction proportionnelle`;
@@ -615,13 +205,10 @@ function calculateStudentPrice() {
             details += ` (renouvellement - pas de frais d'inscription)`;
         }
 
-        const detailsElement = document.getElementById('calculationDetails');
-        if (detailsElement) detailsElement.value = details;
+        document.getElementById('calculationDetails').value = details;
     } else {
-        const prorataElement = document.getElementById('prorataPrice');
-        const detailsElement = document.getElementById('calculationDetails');
-        if (prorataElement) prorataElement.value = '';
-        if (detailsElement) detailsElement.value = '';
+        document.getElementById('prorataPrice').value = '';
+        document.getElementById('calculationDetails').value = '';
     }
 }
 
@@ -708,7 +295,7 @@ function addNewStudent(event) {
 
     // CALCUL PRORATA - BIEN DÉFINIR LA VARIABLE
     const prorataData = calculateProrata(registrationDate, selectedDays, finalMonthlyPrice, formula, hours);
-    const finalProrataAmount = prorataData.amount;
+    const finalProrataAmount = prorataData.amount;  // <-- Bien définir cette variable avant de l'utiliser
 
     const student = {
         id: Date.now(),
