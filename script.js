@@ -18,14 +18,13 @@ let appData = {
     payments: [],
     products: [],
     sales: [],
-    expenses: [], // Nouveau: pour les sorties d'argent
-    teacherPayments: [], // Nouveau: pour les salaires des profs
-    monthlyData: {} // Nouveau: données par mois
+    expenses: [],
+    teacherPayments: [],
+    monthlyData: {}
 };
 
 let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
-let syncKey = 'institut_coran_shared_' + new Date().getFullYear(); // Clé partagée
 
 const PRICING = {
     groupe_2h: 32,
@@ -39,7 +38,6 @@ const PRICING = {
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Application chargée');
 
-    // Afficher un indicateur de chargement
     document.getElementById('syncStatus').textContent = 'Initialisation...';
 
     await loadStoredData();
@@ -48,22 +46,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     refreshAllDisplays();
     setupEventListeners();
 
-    // Activer l'écoute en temps réel (optionnel - commentez si vous ne voulez pas)
+    // Activer l'écoute en temps réel (optionnel)
     // setupRealtimeListener();
 
     console.log('Application initialisée');
 });
+
 async function forceSyncNow() {
     document.getElementById('syncStatus').textContent = 'Synchronisation...';
     await saveData();
     showNotification('🔄 Synchronisation forcée !');
 }
 
-
-
 // Configuration des événements
 function setupEventListeners() {
-    // Formulaires - CORRECTION du problème de bouton
     const studentForm = document.getElementById('studentForm');
     const teacherForm = document.getElementById('teacherForm');
     const productForm = document.getElementById('productForm');
@@ -74,7 +70,6 @@ function setupEventListeners() {
     if (productForm) productForm.addEventListener('submit', addNewProduct);
     if (saleForm) saleForm.addEventListener('submit', sellProductToStudent);
 
-    // Nouveau formulaire de dépenses
     const expenseForm = document.getElementById('expenseForm');
     if (expenseForm) expenseForm.addEventListener('submit', addNewExpense);
 
@@ -104,23 +99,17 @@ function setupEventListeners() {
 function switchToSection(sectionId, buttonElement) {
     console.log('Changement vers section:', sectionId);
 
-    // Désactiver tous les boutons
     document.querySelectorAll('.nav-button').forEach(btn => {
         btn.classList.remove('active');
     });
 
-    // Masquer toutes les sections
     document.querySelectorAll('.section-content').forEach(section => {
         section.classList.remove('active');
     });
 
-    // Activer le bouton cliqué
     buttonElement.classList.add('active');
-
-    // Afficher la section
     document.getElementById(sectionId).classList.add('active');
 
-    // Actualiser les données
     refreshAllDisplays();
 }
 
@@ -166,7 +155,6 @@ function calculateStudentPrice() {
     let fullMonthlyPrice = 0;
 
     if (formula === 'groupe_2h') {
-        // Tarif = nombre de jours choisis × 4 semaines × 4€/h
         fullMonthlyPrice = selectedDays.length * 4 * 4;
     } else if (formula === 'groupe_1h') {
         fullMonthlyPrice = selectedDays.length * 4 * 4;
@@ -187,7 +175,6 @@ function calculateStudentPrice() {
     if (registrationDate && selectedDays.length > 0 && finalMonthlyPrice > 0) {
         const prorataData = calculateProrata(registrationDate, selectedDays, finalMonthlyPrice, formula, hours);
 
-        // Appliquer réduction proportionnelle au prorata
         let finalProrataAmount = prorataData.amount;
         if (reduction > 0) {
             const reductionRatio = reduction / fullMonthlyPrice;
@@ -220,7 +207,6 @@ function calculateProrata(registrationDate, courseDays, monthlyPrice, formula, h
 
     let remainingCourseDays = 0;
 
-    // Compter seulement les cours restants dans le mois pour les jours choisis
     for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = new Date(year, month, day);
         const dayOfWeek = currentDate.getDay();
@@ -237,7 +223,6 @@ function calculateProrata(registrationDate, courseDays, monthlyPrice, formula, h
     let pricePerHour = 0;
 
     if (formula === 'groupe_2h') {
-        // Chaque jour choisi = 1h de cours
         totalHours = remainingCourseDays * 1;
         pricePerHour = 4;
     } else if (formula === 'groupe_1h') {
@@ -252,13 +237,12 @@ function calculateProrata(registrationDate, courseDays, monthlyPrice, formula, h
     }
 
     const prorataAmount = totalHours * pricePerHour;
-
     let details = `${totalHours}h × ${pricePerHour}€/h = ${prorataAmount}€`;
 
     return { amount: prorataAmount, details: details };
 }
 
-// Ajout d'un élève - FONCTION CORRIGÉE
+// Ajout d'un élève
 function addNewStudent(event) {
     event.preventDefault();
     console.log("Ajout d'un élève - début");
@@ -279,7 +263,6 @@ function addNewStudent(event) {
         return;
     }
 
-    // Calcul correct du prix mensuel selon jours choisis
     let monthlyPrice = 0;
     if (formula === 'groupe_2h') {
         monthlyPrice = selectedDays.length * 4 * 4;
@@ -293,9 +276,8 @@ function addNewStudent(event) {
 
     const finalMonthlyPrice = Math.max(0, monthlyPrice - reduction);
 
-    // CALCUL PRORATA - BIEN DÉFINIR LA VARIABLE
     const prorataData = calculateProrata(registrationDate, selectedDays, finalMonthlyPrice, formula, hours);
-    const finalProrataAmount = prorataData.amount;  // <-- Bien définir cette variable avant de l'utiliser
+    const finalProrataAmount = prorataData.amount;
 
     const student = {
         id: Date.now(),
@@ -350,7 +332,6 @@ function addNewStudent(event) {
     saveData();
     refreshAllDisplays();
 
-    // Reset formulaire et état des jours sélectionnés
     document.getElementById('studentForm').reset();
     resetDaySelection();
     setDefaultDate();
@@ -444,7 +425,6 @@ function sellProductToStudent(event) {
 
     appData.sales.push(sale);
 
-    // Ajouter paiement
     appData.payments.push({
         id: Date.now() + 1,
         studentId,
@@ -505,6 +485,15 @@ function deleteTeacher(teacherId) {
     }
 }
 
+function deleteProduct(productId) {
+    if (confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) {
+        appData.products = appData.products.filter(p => p.id !== productId);
+        saveData();
+        refreshAllDisplays();
+        showNotification('🗑️ Produit supprimé');
+    }
+}
+
 // Ajout d'une dépense
 function addNewExpense(event) {
     event.preventDefault();
@@ -536,6 +525,15 @@ function addNewExpense(event) {
     showNotification('💸 Dépense ajoutée avec succès !');
 }
 
+function deleteExpense(expenseId) {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette dépense ?')) {
+        appData.expenses = appData.expenses.filter(e => e.id !== expenseId);
+        saveData();
+        refreshAllDisplays();
+        showNotification('🗑️ Dépense supprimée');
+    }
+}
+
 // Changer de mois dans la comptabilité
 function changeMonth() {
     currentMonth = parseInt(document.getElementById('monthSelector').value);
@@ -547,7 +545,6 @@ function changeMonth() {
 function calculateTeacherSalaries(month, year) {
     let totalSalaries = 0;
 
-    // Paiements payés hors inscription
     const paidPayments = appData.payments.filter(p =>
         p.month === month &&
         p.year === year &&
@@ -561,14 +558,14 @@ function calculateTeacherSalaries(month, year) {
             let teacherRate = 0;
 
             if (student.formula === 'groupe_2h' || student.formula === 'groupe_1h' || student.formula === 'duo') {
-                teacherRate = 5; // €/h groupes et duo
+                teacherRate = 5;
             } else if (student.formula === 'individuel') {
-                teacherRate = 6; // €/h individuel
+                teacherRate = 6;
             }
 
             let hoursTeached = 0;
             if (student.formula === 'groupe_2h') {
-                hoursTeached = selectedDaysCount(student) || 2; // compter jours cours ou défaut 2h
+                hoursTeached = selectedDaysCount(student) || 2;
             } else if (student.formula === 'groupe_1h') {
                 hoursTeached = selectedDaysCount(student) || 1;
             } else {
@@ -583,19 +580,13 @@ function calculateTeacherSalaries(month, year) {
     return Math.round(totalSalaries * 100) / 100;
 }
 
-// Helper : compter nombre jours selectionnés dans un élève
 function selectedDaysCount(student) {
     return student.courseDays ? student.courseDays.length : 0;
 }
 
-// Synchronisation temps réel
+// Synchronisation
 async function syncWithServer() {
     await saveData();
-}
-
-function forceSyncNow() {
-    syncWithServer();
-    showNotification('🔄 Synchronisation forcée !');
 }
 
 function setupRealtimeListener() {
@@ -615,7 +606,6 @@ function setupRealtimeListener() {
                 monthlyData: data.monthlyData || {}
             };
 
-            // Vérifier si les données ont changé pour éviter les boucles
             if (JSON.stringify(newAppData) !== JSON.stringify(appData)) {
                 appData = newAppData;
                 refreshAllDisplays();
@@ -630,7 +620,6 @@ function setupRealtimeListener() {
 // Téléchargement sauvegarde mensuelle
 async function downloadMonthlyBackup() {
     try {
-        // Récupérer les données les plus récentes de Firebase
         const docRef = db.collection('institut_data').doc('main_data');
         const doc = await docRef.get();
         let dataToExport = appData;
@@ -681,7 +670,6 @@ function togglePaymentStatus(paymentId) {
     if (payment) {
         payment.status = payment.status === 'paid' ? 'unpaid' : 'paid';
 
-        // Mettre à jour le statut de vente correspondant
         const sale = appData.sales.find(s => s.studentId === payment.studentId && s.productName === payment.productName);
         if (sale) {
             sale.status = payment.status;
@@ -690,15 +678,6 @@ function togglePaymentStatus(paymentId) {
         saveData();
         refreshAllDisplays();
         showNotification(`💰 Paiement ${payment.status === 'paid' ? 'marqué comme payé' : 'marqué comme non payé'}`);
-    }
-}
-
-function deleteProduct(productId) {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) {
-        appData.products = appData.products.filter(p => p.id !== productId);
-        saveData();
-        refreshAllDisplays();
-        showNotification('🗑️ Produit supprimé');
     }
 }
 
@@ -718,36 +697,28 @@ function refreshAllDisplays() {
 
 // Mise à jour des affichages comptables
 function updateAccountingDisplays() {
-    // Mettre à jour les sélecteurs
     document.getElementById('monthSelector').value = currentMonth;
     document.getElementById('yearSelector').value = currentYear;
 
-    // Calculer les entrées (paiements payés)
     const monthPayments = appData.payments.filter(p =>
         p.month === currentMonth && p.year === currentYear && p.status === 'paid'
     );
     const totalIncome = monthPayments.reduce((sum, p) => sum + p.amount, 0);
 
-    // Calculer les sorties
     const monthExpenses = appData.expenses.filter(e =>
         e.month === currentMonth && e.year === currentYear
     );
     const totalExpenses = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-    // Calculer les salaires des profs
     const teacherSalaries = calculateTeacherSalaries(currentMonth, currentYear);
-
-    // Calculer le bénéfice net
     const netProfit = totalIncome - totalExpenses - teacherSalaries;
 
-    // Afficher les résultats
     document.getElementById('totalIncome').textContent = `${totalIncome}€`;
     document.getElementById('totalExpenses').textContent = `${totalExpenses}€`;
     document.getElementById('totalTeacherSalaries').textContent = `${teacherSalaries}€`;
     document.getElementById('netProfit').textContent = `${netProfit}€`;
     document.getElementById('netProfit').style.color = netProfit >= 0 ? '#28a745' : '#dc3545';
 
-    // Mettre à jour la liste des dépenses
     updateExpensesList();
 }
 
@@ -764,36 +735,27 @@ function updateExpensesList() {
 
     if (monthExpenses.length === 0) {
         container.innerHTML = `
-                    <div class="empty-state">
-                        Aucune sortie enregistrée pour ce mois<br>
-                        <small>Ajoutez vos dépenses ci-dessus</small>
-                    </div>
-                `;
+            <div class="empty-state">
+                Aucune sortie enregistrée pour ce mois<br>
+                <small>Ajoutez vos dépenses ci-dessus</small>
+            </div>
+        `;
         return;
     }
 
     const sortedExpenses = [...monthExpenses].sort((a, b) => new Date(b.date) - new Date(a.date));
 
     container.innerHTML = sortedExpenses.map(expense => `
-                <div class="table-row">
-                    <div class="row-content">
-                        <strong>${expense.description}</strong><br>
-                        <small>💰 ${expense.amount}€ | 📅 ${formatDate(expense.date)}</small>
-                    </div>
-                    <div class="row-actions">
-                        <button class="btn btn-danger" onclick="deleteExpense(${expense.id})">🗑️</button>
-                    </div>
-                </div>
-            `).join('');
-}
-
-function deleteExpense(expenseId) {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette dépense ?')) {
-        appData.expenses = appData.expenses.filter(e => e.id !== expenseId);
-        saveData();
-        refreshAllDisplays();
-        showNotification('🗑️ Dépense supprimée');
-    }
+        <div class="table-row">
+            <div class="row-content">
+                <strong>${expense.description}</strong><br>
+                <small>💰 ${expense.amount}€ | 📅 ${formatDate(expense.date)}</small>
+            </div>
+            <div class="row-actions">
+                <button class="btn btn-danger" onclick="deleteExpense(${expense.id})">🗑️</button>
+            </div>
+        </div>
+    `).join('');
 }
 
 // Mise à jour des statistiques
@@ -829,11 +791,11 @@ function updateStudentsList() {
 
     if (appData.students.length === 0) {
         container.innerHTML = `
-                    <div class="empty-state">
-                        Aucun élève inscrit pour le moment<br>
-                        <small>Utilisez le formulaire ci-dessus pour ajouter votre premier élève</small>
-                    </div>
-                `;
+            <div class="empty-state">
+                Aucun élève inscrit pour le moment<br>
+                <small>Utilisez le formulaire ci-dessus pour ajouter votre premier élève</small>
+            </div>
+        `;
         return;
     }
 
@@ -849,18 +811,18 @@ function updateStudentsList() {
         const inscriptionInfo = student.inscriptionType === 'renewal' ? '🔄' : '🆕';
 
         return `
-                    <div class="table-row">
-                        <div class="row-content">
-                            <strong>${student.firstName} ${student.lastName}</strong> ${inscriptionInfo}<br>
-                            <small>📞 ${student.phone || 'Non renseigné'}</small><br>
-                            <small>📚 ${getFormulaText(student.formula)} | 👨‍🏫 ${teacherName}</small><br>
-                            <small>📅 ${student.courseDays.map(d => d.text).join(', ')} | 💰 ${priceInfo}</small>
-                        </div>
-                        <div class="row-actions">
-                            <button class="btn btn-danger" onclick="deleteStudent(${student.id})">🗑️</button>
-                        </div>
-                    </div>
-                `;
+            <div class="table-row">
+                <div class="row-content">
+                    <strong>${student.firstName} ${student.lastName}</strong> ${inscriptionInfo}<br>
+                    <small>📞 ${student.phone || 'Non renseigné'}</small><br>
+                    <small>📚 ${getFormulaText(student.formula)} | 👨‍🏫 ${teacherName}</small><br>
+                    <small>📅 ${student.courseDays.map(d => d.text).join(', ')} | 💰 ${priceInfo}</small>
+                </div>
+                <div class="row-actions">
+                    <button class="btn btn-danger" onclick="deleteStudent(${student.id})">🗑️</button>
+                </div>
+            </div>
+        `;
     }).join('');
 }
 
@@ -873,25 +835,25 @@ function updateTeachersList() {
 
     if (appData.teachers.length === 0) {
         container.innerHTML = `
-                    <div class="empty-state">
-                        Aucun professeur ajouté pour le moment<br>
-                        <small>Utilisez le formulaire ci-dessus pour ajouter votre premier professeur</small>
-                    </div>
-                `;
+            <div class="empty-state">
+                Aucun professeur ajouté pour le moment<br>
+                <small>Utilisez le formulaire ci-dessus pour ajouter votre premier professeur</small>
+            </div>
+        `;
         return;
     }
 
     container.innerHTML = appData.teachers.map(teacher => `
-                <div class="table-row">
-                    <div class="row-content">
-                        <strong>${teacher.firstName} ${teacher.lastName}</strong><br>
-                        <small>📚 Spécialité: ${teacher.specialty}</small>
-                    </div>
-                    <div class="row-actions">
-                        <button class="btn btn-danger" onclick="deleteTeacher(${teacher.id})">🗑️</button>
-                    </div>
-                </div>
-            `).join('');
+        <div class="table-row">
+            <div class="row-content">
+                <strong>${teacher.firstName} ${teacher.lastName}</strong><br>
+                <small>📚 Spécialité: ${teacher.specialty}</small>
+            </div>
+            <div class="row-actions">
+                <button class="btn btn-danger" onclick="deleteTeacher(${teacher.id})">🗑️</button>
+            </div>
+        </div>
+    `).join('');
 }
 
 // Mise à jour de la liste des produits
@@ -903,26 +865,26 @@ function updateProductsList() {
 
     if (appData.products.length === 0) {
         container.innerHTML = `
-                    <div class="empty-state">
-                        Aucun produit ajouté<br>
-                        <small>Ajoutez vos premiers produits ci-dessus</small>
-                    </div>
-                `;
+            <div class="empty-state">
+                Aucun produit ajouté<br>
+                <small>Ajoutez vos premiers produits ci-dessus</small>
+            </div>
+        `;
         return;
     }
 
     container.innerHTML = appData.products.map(product => `
-                <div class="table-row">
-                    <div class="row-content">
-                        <strong>${product.name}</strong><br>
-                        <small>💰 ${product.price}€</small><br>
-                        ${product.description ? `<small>📋 ${product.description}</small>` : ''}
-                    </div>
-                    <div class="row-actions">
-                        <button class="btn btn-danger" onclick="deleteProduct(${product.id})">🗑️</button>
-                    </div>
-                </div>
-            `).join('');
+        <div class="table-row">
+            <div class="row-content">
+                <strong>${product.name}</strong><br>
+                <small>💰 ${product.price}€</small><br>
+                ${product.description ? `<small>📋 ${product.description}</small>` : ''}
+            </div>
+            <div class="row-actions">
+                <button class="btn btn-danger" onclick="deleteProduct(${product.id})">🗑️</button>
+            </div>
+        </div>
+    `).join('');
 }
 
 // Mise à jour de l'historique des ventes
@@ -934,30 +896,30 @@ function updateSalesList() {
 
     if (appData.sales.length === 0) {
         container.innerHTML = `
-                    <div class="empty-state">
-                        Aucune vente enregistrée<br>
-                        <small>Les ventes apparaîtront ici</small>
-                    </div>
-                `;
+            <div class="empty-state">
+                Aucune vente enregistrée<br>
+                <small>Les ventes apparaîtront ici</small>
+            </div>
+        `;
         return;
     }
 
     const sortedSales = [...appData.sales].sort((a, b) => new Date(b.date) - new Date(a.date));
 
     container.innerHTML = sortedSales.map(sale => `
-                <div class="table-row">
-                    <div class="row-content">
-                        <strong>${sale.studentName}</strong><br>
-                        <small>📦 ${sale.productName} x${sale.quantity} | 💰 ${sale.totalAmount}€</small><br>
-                        <small>📅 ${formatDate(sale.date)} | ${sale.unitPrice}€/unité</small>
-                    </div>
-                    <div class="row-actions">
-                        <span class="status-${sale.status}">
-                            ${sale.status === 'paid' ? '✅ Payé' : '❌ Non payé'}
-                        </span>
-                    </div>
-                </div>
-            `).join('');
+        <div class="table-row">
+            <div class="row-content">
+                <strong>${sale.studentName}</strong><br>
+                <small>📦 ${sale.productName} x${sale.quantity} | 💰 ${sale.totalAmount}€</small><br>
+                <small>📅 ${formatDate(sale.date)} | ${sale.unitPrice}€/unité</small>
+            </div>
+            <div class="row-actions">
+                <span class="status-${sale.status}">
+                    ${sale.status === 'paid' ? '✅ Payé' : '❌ Non payé'}
+                </span>
+            </div>
+        </div>
+    `).join('');
 }
 
 // Mise à jour de la liste des paiements
@@ -971,7 +933,6 @@ function updatePaymentsList() {
         p.month === currentMonth && p.year === currentYear
     );
 
-    // Résumé financier
     const totalExpected = currentMonthPayments.reduce((sum, p) => sum + p.amount, 0);
     const totalReceived = currentMonthPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0);
     const totalPending = currentMonthPayments.filter(p => p.status === 'unpaid').reduce((sum, p) => sum + p.amount, 0);
@@ -984,11 +945,11 @@ function updatePaymentsList() {
 
     if (currentMonthPayments.length === 0) {
         container.innerHTML = `
-                    <div class="empty-state">
-                        Aucun paiement à afficher<br>
-                        <small>Les paiements apparaîtront quand vous ajouterez des élèves</small>
-                    </div>
-                `;
+            <div class="empty-state">
+                Aucun paiement à afficher<br>
+                <small>Les paiements apparaîtront quand vous ajouterez des élèves</small>
+            </div>
+        `;
         return;
     }
 
@@ -1003,19 +964,19 @@ function updatePaymentsList() {
         }
 
         return `
-                    <div class="table-row">
-                        <div class="row-content">
-                            <strong>${payment.studentName}</strong><br>
-                            <small>${paymentTypeText} | 💰 ${payment.amount}€</small><br>
-                            <small>📅 Échéance: ${formatDate(payment.dueDate)}</small>
-                        </div>
-                        <div class="row-actions">
-                            <span class="status-${payment.status}" onclick="togglePaymentStatus(${payment.id})">
-                                ${payment.status === 'paid' ? '✅ Payé' : '❌ Non payé'}
-                            </span>
-                        </div>
-                    </div>
-                `;
+            <div class="table-row">
+                <div class="row-content">
+                    <strong>${payment.studentName}</strong><br>
+                    <small>${paymentTypeText} | 💰 ${payment.amount}€</small><br>
+                    <small>📅 Échéance: ${formatDate(payment.dueDate)}</small>
+                </div>
+                <div class="row-actions">
+                    <span class="status-${payment.status}" onclick="togglePaymentStatus(${payment.id})">
+                        ${payment.status === 'paid' ? '✅ Payé' : '❌ Non payé'}
+                    </span>
+                </div>
+            </div>
+        `;
     }).join('');
 }
 
@@ -1056,30 +1017,6 @@ function updateProductsDropdown() {
     select.value = currentValue;
 }
 
-// AJOUTEZ CETTE FONCTION POUR LA NAVIGATION ENTRE SECTIONS
-function switchToSection(sectionId, buttonElement) {
-    console.log('Changement vers section:', sectionId);
-
-    // Désactiver tous les boutons
-    document.querySelectorAll('.nav-button').forEach(btn => {
-        btn.classList.remove('active');
-    });
-
-    // Masquer toutes les sections
-    document.querySelectorAll('.section-content').forEach(section => {
-        section.classList.remove('active');
-    });
-
-    // Activer le bouton cliqué
-    buttonElement.classList.add('active');
-
-    // Afficher la section
-    document.getElementById(sectionId).classList.add('active');
-
-    // Actualiser les données
-    refreshAllDisplays();
-}
-
 // Fonctions utilitaires
 function setDefaultDate() {
     const today = new Date().toISOString().split('T')[0];
@@ -1104,7 +1041,6 @@ function updateCurrentMonthDisplay() {
         displayElement.textContent = `${monthName} ${year}`;
     }
 
-    // Initialiser les sélecteurs
     currentMonth = currentDate.getMonth();
     currentYear = currentDate.getFullYear();
 }
@@ -1141,6 +1077,7 @@ function showNotification(message) {
     }, 3000);
 }
 
+// Sauvegarde et chargement - UNIQUEMENT FIREBASE
 async function saveData() {
     try {
         const docRef = db.collection('institut_data').doc('main_data');
@@ -1156,17 +1093,9 @@ async function saveData() {
         console.error('Erreur de sauvegarde Firebase:', error);
         document.getElementById('syncStatus').textContent = 'Erreur sync ❌';
         document.getElementById('syncStatus').style.color = '#dc3545';
-
-        // Fallback vers localStorage en cas d'erreur
-        try {
-            localStorage.setItem(syncKey, JSON.stringify(appData));
-            console.log('Sauvegarde locale effectuée en fallback');
-        } catch (localError) {
-            console.error('Erreur sauvegarde locale:', localError);
-        }
+        showNotification('❌ Erreur de synchronisation');
     }
 }
-
 
 async function loadStoredData() {
     try {
@@ -1177,7 +1106,6 @@ async function loadStoredData() {
 
         if (doc.exists) {
             const data = doc.data();
-            // Assurer que toutes les propriétés existent
             appData = {
                 students: data.students || [],
                 teachers: data.teachers || [],
@@ -1192,37 +1120,7 @@ async function loadStoredData() {
             document.getElementById('syncStatus').textContent = 'Synchronisé ✅';
             document.getElementById('syncStatus').style.color = '#28a745';
         } else {
-            // Essayer de charger depuis localStorage si pas de données Firebase
-            await loadFromLocalStorage();
-        }
-    } catch (error) {
-        console.error('Erreur de chargement Firebase:', error);
-        document.getElementById('syncStatus').textContent = 'Mode hors-ligne';
-        document.getElementById('syncStatus').style.color = '#ffa500';
-
-        // Fallback vers localStorage
-        await loadFromLocalStorage();
-    }
-}
-// Fonction fallback pour localStorage
-async function loadFromLocalStorage() {
-    try {
-        const stored = localStorage.getItem(syncKey);
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            appData = {
-                students: parsed.students || [],
-                teachers: parsed.teachers || [],
-                payments: parsed.payments || [],
-                products: parsed.products || [],
-                sales: parsed.sales || [],
-                expenses: parsed.expenses || [],
-                teacherPayments: parsed.teacherPayments || [],
-                monthlyData: parsed.monthlyData || {}
-            };
-            console.log('Données chargées depuis localStorage');
-        } else {
-            // Initialiser avec des données vides
+            // Initialiser avec des données vides si pas de document Firebase
             appData = {
                 students: [],
                 teachers: [],
@@ -1233,9 +1131,16 @@ async function loadFromLocalStorage() {
                 teacherPayments: [],
                 monthlyData: {}
             };
+            console.log('Nouveau document Firebase - données initialisées');
+            document.getElementById('syncStatus').textContent = 'Nouveau ✨';
+            document.getElementById('syncStatus').style.color = '#007bff';
         }
     } catch (error) {
-        console.error('Erreur chargement localStorage:', error);
+        console.error('Erreur de chargement Firebase:', error);
+        document.getElementById('syncStatus').textContent = 'Hors-ligne ⚠️';
+        document.getElementById('syncStatus').style.color = '#ffa500';
+
+        // Initialiser avec des données vides en cas d'erreur
         appData = {
             students: [],
             teachers: [],
@@ -1246,5 +1151,7 @@ async function loadFromLocalStorage() {
             teacherPayments: [],
             monthlyData: {}
         };
+
+        showNotification('⚠️ Mode hors-ligne - vérifiez votre connexion');
     }
 }
