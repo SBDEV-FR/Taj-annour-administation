@@ -1,11 +1,10 @@
 const firebaseConfig = {
-    apiKey: "AIzaSyDLa4Kkq2hx_zgwLtIrPgwPAXCCK3-uB1c",
-    authDomain: "taj-annour.firebaseapp.com",
-    projectId: "taj-annour",
-    storageBucket: "taj-annour.firebasestorage.app",
-    messagingSenderId: "774256127376",
-    appId: "1:774256127376:web:07eee124fbc3dc4b6b5715",
-    measurementId: "G-EMMMKEGV0L"
+    apiKey: "AIzaSyBGkC7-jcAg5eG2RnLZcpRsGUeCE1Ae0aM",
+    authDomain: "institut-coran.firebaseapp.com",
+    projectId: "institut-coran",
+    storageBucket: "institut-coran.firebasestorage.app",
+    messagingSenderId: "339991503694",
+    appId: "1:339991503694:web:2550a858d55d75822a741f",
 };
 
 firebase.initializeApp(firebaseConfig);
