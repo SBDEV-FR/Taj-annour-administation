@@ -4,7 +4,8 @@ const firebaseConfig = {
     projectId: "institut-coran",
     storageBucket: "institut-coran.firebasestorage.app",
     messagingSenderId: "339991503694",
-    appId: "1:339991503694:web:2550a858d55d75822a741f"
+    appId: "1:339991503694:web:2550a858d55d75822a741f",
+    measurementId: "G-EMMMKEGV0L"
 };
 
 firebase.initializeApp(firebaseConfig);
