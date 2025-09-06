@@ -25,19 +25,28 @@ let appData = {
 let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
 
+// Constantes pour les tarifs
 const PRICING = {
-    groupe_2h: 32,
-    groupe_1h: 16,
+    groupe_2h: { price: 4, hours: 2 },
+    groupe_1h: { price: 4, hours: 1 },
     duo: 7,
     individuel: 10,
     inscription: 5
+};
+
+// Constantes pour les salaires des professeurs
+const TEACHER_RATES = {
+    groupe_2h: 5,
+    groupe_1h: 5,
+    duo: 5,
+    individuel: 6
 };
 
 // Initialisation au chargement de la page
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Application chargée');
 
-    document.getElementById('syncStatus').textContent = 'Initialisation...';
+    updateSyncStatus('Initialisation...');
 
     await loadStoredData();
     updateCurrentMonthDisplay();
@@ -45,40 +54,41 @@ document.addEventListener('DOMContentLoaded', async function() {
     refreshAllDisplays();
     setupEventListeners();
 
-    // Activer l'écoute en temps réel (optionnel)
-    // setupRealtimeListener();
+    // Synchronisation automatique
+    startAutoSync();
 
     console.log('Application initialisée');
 });
 
+// Synchronisation forcée
 async function forceSyncNow() {
-    document.getElementById('syncStatus').textContent = 'Synchronisation...';
+    updateSyncStatus('Synchronisation...');
     await saveData();
-    showNotification('🔄 Synchronisation forcée !');
+    showNotification('Synchronisation forcée !');
 }
 
 // Configuration des événements
 function setupEventListeners() {
-    const studentForm = document.getElementById('studentForm');
-    const teacherForm = document.getElementById('teacherForm');
-    const productForm = document.getElementById('productForm');
-    const saleForm = document.getElementById('saleForm');
+    const forms = [
+        { id: 'studentForm', handler: addNewStudent },
+        { id: 'teacherForm', handler: addNewTeacher },
+        { id: 'productForm', handler: addNewProduct },
+        { id: 'saleForm', handler: sellProductToStudent },
+        { id: 'expenseForm', handler: addNewExpense }
+    ];
 
-    if (studentForm) studentForm.addEventListener('submit', addNewStudent);
-    if (teacherForm) teacherForm.addEventListener('submit', addNewTeacher);
-    if (productForm) productForm.addEventListener('submit', addNewProduct);
-    if (saleForm) saleForm.addEventListener('submit', sellProductToStudent);
+    forms.forEach(form => {
+        const element = document.getElementById(form.id);
+        if (element) element.addEventListener('submit', form.handler);
+    });
 
-    const expenseForm = document.getElementById('expenseForm');
-    if (expenseForm) expenseForm.addEventListener('submit', addNewExpense);
-
-    // Calculs en temps réel
-    const elements = [
+    // Calculs en temps réel pour les élèves
+    const studentCalculationElements = [
         'studentFormula', 'studentHours', 'studentReduction',
         'inscriptionType', 'registrationDate'
     ];
 
-    elements.forEach(id => {
+    studentCalculationElements.forEach(id => {
         const element = document.getElementById(id);
         if (element) element.addEventListener('change', calculateStudentPrice);
     });
@@ -89,9 +99,13 @@ function setupEventListeners() {
         const element = document.getElementById(id);
         if (element) element.addEventListener('change', updateSaleTotal);
     });
+}
 
-    // Synchronisation automatique toutes les 10 secondes
-    setInterval(syncWithServer, 10000);
+// Démarrage de la synchronisation automatique
+function startAutoSync() {
+    setInterval(async () => {
+        await saveData();
+    }, 10000); // Toutes les 10 secondes
 }
 
 // Navigation entre sections
@@ -142,7 +156,7 @@ function resetDaySelection() {
     labels.forEach(label => label.classList.remove('selected'));
 }
 
-// Calcul des prix
+// Calcul des prix - CORRIGÉ
 function calculateStudentPrice() {
     const formula = document.getElementById('studentFormula').value;
     const hours = parseFloat(document.getElementById('studentHours').value) || 1;
@@ -151,16 +165,25 @@ function calculateStudentPrice() {
     const reduction = parseFloat(document.getElementById('studentReduction').value) || 0;
     const inscriptionType = document.getElementById('inscriptionType').value;
 
+    if (!formula || selectedDays.length === 0) {
+        document.getElementById('fullMonthlyPrice').value = '';
+        document.getElementById('prorataPrice').value = '';
+        document.getElementById('calculationDetails').value = '';
+        return;
+    }
+
+    // Calcul correct du prix mensuel
     let fullMonthlyPrice = 0;
 
-    if (formula === 'groupe_2h') {
-        fullMonthlyPrice = selectedDays.length * 4 * 4;
-    } else if (formula === 'groupe_1h') {
-        fullMonthlyPrice = selectedDays.length * 4 * 4;
+    if (formula === 'groupe_2h' || formula === 'groupe_1h') {
+        // Pour les groupes : nombre de jours × 4 semaines × tarif par cours
+        fullMonthlyPrice = selectedDays.length * 4 * PRICING[formula].price;
     } else if (formula === 'duo') {
-        fullMonthlyPrice = 7 * hours * 4;
+        // Pour duo : heures par cours × nombre de jours × 4 semaines × tarif
+        fullMonthlyPrice = hours * selectedDays.length * 4 * PRICING.duo;
     } else if (formula === 'individuel') {
-        fullMonthlyPrice = 10 * hours * 4;
+        // Pour individuel : heures par cours × nombre de jours × 4 semaines × tarif
+        fullMonthlyPrice = hours * selectedDays.length * 4 * PRICING.individuel;
     }
 
     const finalMonthlyPrice = Math.max(0, fullMonthlyPrice - reduction);
@@ -171,7 +194,8 @@ function calculateStudentPrice() {
     }
     document.getElementById('fullMonthlyPrice').value = priceText;
 
-    if (registrationDate && selectedDays.length > 0 && finalMonthlyPrice > 0) {
+    // Calcul du prorata
+    if (registrationDate && finalMonthlyPrice > 0) {
         const prorataData = calculateProrata(registrationDate, selectedDays, finalMonthlyPrice, formula, hours);
 
         let finalProrataAmount = prorataData.amount;
@@ -186,7 +210,7 @@ function calculateStudentPrice() {
         let details = prorataData.details;
         if (reduction > 0) details += ` - réduction proportionnelle`;
         if (inscriptionType === 'new') {
-            details += ` + 5€ frais d'inscription`;
+            details += ` + ${PRICING.inscription}€ frais d'inscription`;
         } else {
             details += ` (renouvellement - pas de frais d'inscription)`;
         }
@@ -198,6 +222,7 @@ function calculateStudentPrice() {
     }
 }
 
+// Calcul du prorata - CORRIGÉ
 function calculateProrata(registrationDate, courseDays, monthlyPrice, formula, hours) {
     const regDate = new Date(registrationDate);
     const year = regDate.getFullYear();
@@ -206,6 +231,7 @@ function calculateProrata(registrationDate, courseDays, monthlyPrice, formula, h
 
     let remainingCourseDays = 0;
 
+    // Compter les jours de cours restants dans le mois
     for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = new Date(year, month, day);
         const dayOfWeek = currentDate.getDay();
@@ -218,125 +244,158 @@ function calculateProrata(registrationDate, courseDays, monthlyPrice, formula, h
         return { amount: 0, details: "Aucun cours restant ce mois-ci" };
     }
 
-    let totalHours = 0;
-    let pricePerHour = 0;
+    let prorataAmount = 0;
+    let details = '';
 
-    if (formula === 'groupe_2h') {
-        totalHours = remainingCourseDays * 1;
-        pricePerHour = 4;
-    } else if (formula === 'groupe_1h') {
-        totalHours = remainingCourseDays * 1;
-        pricePerHour = 4;
+    if (formula === 'groupe_2h' || formula === 'groupe_1h') {
+        prorataAmount = remainingCourseDays * PRICING[formula].price;
+        details = `${remainingCourseDays} cours × ${PRICING[formula].price}€ = ${prorataAmount}€`;
     } else if (formula === 'duo') {
-        totalHours = remainingCourseDays * hours;
-        pricePerHour = 7;
+        const totalHours = remainingCourseDays * hours;
+        prorataAmount = totalHours * PRICING.duo;
+        details = `${totalHours}h (${remainingCourseDays} cours × ${hours}h) × ${PRICING.duo}€/h = ${prorataAmount}€`;
     } else if (formula === 'individuel') {
-        totalHours = remainingCourseDays * hours;
-        pricePerHour = 10;
+        const totalHours = remainingCourseDays * hours;
+        prorataAmount = totalHours * PRICING.individuel;
+        details = `${totalHours}h (${remainingCourseDays} cours × ${hours}h) × ${PRICING.individuel}€/h = ${prorataAmount}€`;
     }
-
-    const prorataAmount = totalHours * pricePerHour;
-    let details = `${totalHours}h × ${pricePerHour}€/h = ${prorataAmount}€`;
 
     return { amount: prorataAmount, details: details };
 }
 
-// Ajout d'un élève
+// Ajout d'un élève - OPTIMISÉ
 function addNewStudent(event) {
     event.preventDefault();
     console.log("Ajout d'un élève - début");
 
-    const firstName = document.getElementById('studentFirstName').value.trim();
-    const lastName = document.getElementById('studentLastName').value.trim();
-    const phone = document.getElementById('studentPhone').value.trim();
-    const formula = document.getElementById('studentFormula').value;
-    const hours = parseFloat(document.getElementById('studentHours').value) || 1;
-    const registrationDate = document.getElementById('registrationDate').value;
-    const assignedTeacher = document.getElementById('assignedTeacher').value;
-    const selectedDays = getSelectedCourseDays();
-    const reduction = parseFloat(document.getElementById('studentReduction').value) || 0;
-    const inscriptionType = document.getElementById('inscriptionType').value;
+    const formData = getStudentFormData();
 
-    if (selectedDays.length === 0) {
-        alert('Veuillez sélectionner au moins un jour de cours.');
+    if (!validateStudentForm(formData)) {
         return;
     }
 
-    let monthlyPrice = 0;
-    if (formula === 'groupe_2h') {
-        monthlyPrice = selectedDays.length * 4 * 4;
-    } else if (formula === 'groupe_1h') {
-        monthlyPrice = selectedDays.length * 4 * 4;
-    } else if (formula === 'duo') {
-        monthlyPrice = 7 * hours * 4;
-    } else if (formula === 'individuel') {
-        monthlyPrice = 10 * hours * 4;
-    }
-
-    const finalMonthlyPrice = Math.max(0, monthlyPrice - reduction);
-
-    const prorataData = calculateProrata(registrationDate, selectedDays, finalMonthlyPrice, formula, hours);
-    const finalProrataAmount = prorataData.amount;
-
-    const student = {
-        id: Date.now(),
-        firstName,
-        lastName,
-        phone,
-        formula,
-        hours,
-        courseDays: selectedDays,
-        registrationDate,
-        assignedTeacher,
-        monthlyPrice: finalMonthlyPrice,
-        originalPrice: monthlyPrice,
-        reduction,
-        inscriptionType,
-        prorataAmount: finalProrataAmount,
-        status: 'active'
-    };
-
+    const student = createStudentObject(formData);
     appData.students.push(student);
 
-    const registrationMonth = new Date(registrationDate);
+    createStudentPayments(student, formData);
 
-    if (inscriptionType === 'new') {
+    saveData();
+    refreshAllDisplays();
+    resetStudentForm();
+
+    showNotification('Élève ajouté avec succès !');
+    console.log("Ajout d'un élève - terminé");
+}
+
+// Récupération des données du formulaire élève
+function getStudentFormData() {
+    return {
+        firstName: document.getElementById('studentFirstName').value.trim(),
+        lastName: document.getElementById('studentLastName').value.trim(),
+        phone: document.getElementById('studentPhone').value.trim(),
+        formula: document.getElementById('studentFormula').value,
+        hours: parseFloat(document.getElementById('studentHours').value) || 1,
+        registrationDate: document.getElementById('registrationDate').value,
+        assignedTeacher: document.getElementById('assignedTeacher').value,
+        selectedDays: getSelectedCourseDays(),
+        reduction: parseFloat(document.getElementById('studentReduction').value) || 0,
+        inscriptionType: document.getElementById('inscriptionType').value
+    };
+}
+
+// Validation du formulaire élève
+function validateStudentForm(formData) {
+    if (!formData.firstName || !formData.lastName || !formData.formula) {
+        alert('Veuillez remplir tous les champs obligatoires.');
+        return false;
+    }
+
+    if (formData.selectedDays.length === 0) {
+        alert('Veuillez sélectionner au moins un jour de cours.');
+        return false;
+    }
+
+    return true;
+}
+
+// Création de l'objet élève
+function createStudentObject(formData) {
+    let fullMonthlyPrice = 0;
+
+    if (formData.formula === 'groupe_2h' || formData.formula === 'groupe_1h') {
+        fullMonthlyPrice = formData.selectedDays.length * 4 * PRICING[formData.formula].price;
+    } else if (formData.formula === 'duo') {
+        fullMonthlyPrice = formData.hours * formData.selectedDays.length * 4 * PRICING.duo;
+    } else if (formData.formula === 'individuel') {
+        fullMonthlyPrice = formData.hours * formData.selectedDays.length * 4 * PRICING.individuel;
+    }
+
+    const finalMonthlyPrice = Math.max(0, fullMonthlyPrice - formData.reduction);
+    const prorataData = calculateProrata(formData.registrationDate, formData.selectedDays, finalMonthlyPrice, formData.formula, formData.hours);
+
+    return {
+        id: Date.now(),
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        formula: formData.formula,
+        hours: formData.hours,
+        courseDays: formData.selectedDays,
+        registrationDate: formData.registrationDate,
+        assignedTeacher: formData.assignedTeacher,
+        monthlyPrice: finalMonthlyPrice,
+        originalPrice: fullMonthlyPrice,
+        reduction: formData.reduction,
+        inscriptionType: formData.inscriptionType,
+        prorataAmount: prorataData.amount,
+        status: 'active'
+    };
+}
+
+// Création des paiements pour un élève
+function createStudentPayments(student, formData) {
+    const registrationMonth = new Date(formData.registrationDate);
+    const baseId = Date.now();
+
+    // Frais d'inscription pour les nouveaux élèves
+    if (formData.inscriptionType === 'new') {
         appData.payments.push({
-            id: Date.now() + 1,
+            id: baseId + 1,
             studentId: student.id,
-            studentName: `${firstName} ${lastName}`,
+            studentName: `${formData.firstName} ${formData.lastName}`,
             type: 'inscription',
             amount: PRICING.inscription,
             month: registrationMonth.getMonth(),
             year: registrationMonth.getFullYear(),
             status: 'unpaid',
-            dueDate: registrationDate
+            dueDate: formData.registrationDate
         });
     }
 
-    if (finalProrataAmount > 0) {
+    // Paiement prorata si montant > 0
+    if (student.prorataAmount > 0) {
         appData.payments.push({
-            id: Date.now() + 2,
+            id: baseId + 2,
             studentId: student.id,
-            studentName: `${firstName} ${lastName}`,
+            studentName: `${formData.firstName} ${formData.lastName}`,
             type: 'monthly',
-            amount: finalProrataAmount,
+            amount: student.prorataAmount,
             month: registrationMonth.getMonth(),
             year: registrationMonth.getFullYear(),
             status: 'unpaid',
-            dueDate: registrationDate
+            dueDate: formData.registrationDate
         });
     }
+}
 
-    saveData();
-    refreshAllDisplays();
-
+// Réinitialisation du formulaire élève
+function resetStudentForm() {
     document.getElementById('studentForm').reset();
     resetDaySelection();
     setDefaultDate();
-
-    showNotification('✅ Élève ajouté avec succès !');
-    console.log("Ajout d'un élève - terminé");
+    document.getElementById('fullMonthlyPrice').value = '';
+    document.getElementById('prorataPrice').value = '';
+    document.getElementById('calculationDetails').value = '';
 }
 
 // Ajout d'un professeur
@@ -347,6 +406,11 @@ function addNewTeacher(event) {
     const firstName = document.getElementById('teacherFirstName').value.trim();
     const lastName = document.getElementById('teacherLastName').value.trim();
     const specialty = document.getElementById('teacherSpecialty').value;
+
+    if (!firstName || !lastName || !specialty) {
+        alert('Veuillez remplir tous les champs.');
+        return;
+    }
 
     const teacher = {
         id: Date.now(),
@@ -361,7 +425,7 @@ function addNewTeacher(event) {
     refreshAllDisplays();
 
     document.getElementById('teacherForm').reset();
-    showNotification('✅ Professeur ajouté avec succès !');
+    showNotification('Professeur ajouté avec succès !');
 }
 
 // Ajout d'un produit
@@ -372,6 +436,11 @@ function addNewProduct(event) {
     const name = document.getElementById('productName').value.trim();
     const price = parseFloat(document.getElementById('productPrice').value);
     const description = document.getElementById('productDescription').value.trim();
+
+    if (!name || isNaN(price) || price <= 0) {
+        alert('Veuillez remplir correctement le nom et le prix.');
+        return;
+    }
 
     const product = {
         id: Date.now(),
@@ -386,10 +455,10 @@ function addNewProduct(event) {
     refreshAllDisplays();
 
     document.getElementById('productForm').reset();
-    showNotification('✅ Produit ajouté avec succès !');
+    showNotification('Produit ajouté avec succès !');
 }
 
-// Vente d'un produit
+// Vente d'un produit - OPTIMISÉ
 function sellProductToStudent(event) {
     event.preventDefault();
     console.log('Vente d\'un produit');
@@ -397,6 +466,11 @@ function sellProductToStudent(event) {
     const studentId = parseInt(document.getElementById('saleStudentSelect').value);
     const productId = parseInt(document.getElementById('saleProductSelect').value);
     const quantity = parseInt(document.getElementById('saleQuantity').value);
+
+    if (!studentId || !productId || !quantity || quantity <= 0) {
+        alert('Veuillez remplir tous les champs correctement.');
+        return;
+    }
 
     const student = appData.students.find(s => s.id === studentId);
     const product = appData.products.find(p => p.id === productId);
@@ -409,6 +483,7 @@ function sellProductToStudent(event) {
     const totalAmount = product.price * quantity;
     const currentDate = new Date();
 
+    // Enregistrement de la vente
     const sale = {
         id: Date.now(),
         studentId,
@@ -424,6 +499,7 @@ function sellProductToStudent(event) {
 
     appData.sales.push(sale);
 
+    // Création du paiement associé
     appData.payments.push({
         id: Date.now() + 1,
         studentId,
@@ -444,7 +520,7 @@ function sellProductToStudent(event) {
     document.getElementById('saleQuantity').value = 1;
     document.getElementById('saleTotal').value = '';
 
-    showNotification('🛒 Vente enregistrée avec succès !');
+    showNotification('Vente enregistrée avec succès !');
 }
 
 // Calcul du total de vente
@@ -463,34 +539,41 @@ function updateSaleTotal() {
     }
 }
 
-// Suppression d'éléments
+// Suppression d'éléments - SÉCURISÉ
 function deleteStudent(studentId) {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cet élève ?')) {
-        appData.students = appData.students.filter(s => s.id !== studentId);
-        appData.payments = appData.payments.filter(p => p.studentId !== studentId);
-        appData.sales = appData.sales.filter(s => s.studentId !== studentId);
-        saveData();
-        refreshAllDisplays();
-        showNotification('🗑️ Élève supprimé');
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cet élève ? Cette action supprimera également tous ses paiements et ventes.')) {
+        return;
     }
+
+    appData.students = appData.students.filter(s => s.id !== studentId);
+    appData.payments = appData.payments.filter(p => p.studentId !== studentId);
+    appData.sales = appData.sales.filter(s => s.studentId !== studentId);
+
+    saveData();
+    refreshAllDisplays();
+    showNotification('Élève supprimé');
 }
 
 function deleteTeacher(teacherId) {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce professeur ?')) {
-        appData.teachers = appData.teachers.filter(t => t.id !== teacherId);
-        saveData();
-        refreshAllDisplays();
-        showNotification('🗑️ Professeur supprimé');
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce professeur ?')) {
+        return;
     }
+
+    appData.teachers = appData.teachers.filter(t => t.id !== teacherId);
+    saveData();
+    refreshAllDisplays();
+    showNotification('Professeur supprimé');
 }
 
 function deleteProduct(productId) {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) {
-        appData.products = appData.products.filter(p => p.id !== productId);
-        saveData();
-        refreshAllDisplays();
-        showNotification('🗑️ Produit supprimé');
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) {
+        return;
     }
+
+    appData.products = appData.products.filter(p => p.id !== productId);
+    saveData();
+    refreshAllDisplays();
+    showNotification('Produit supprimé');
 }
 
 // Ajout d'une dépense
@@ -501,6 +584,11 @@ function addNewExpense(event) {
     const description = document.getElementById('expenseDescription').value.trim();
     const amount = parseFloat(document.getElementById('expenseAmount').value);
     const date = document.getElementById('expenseDate').value;
+
+    if (!description || isNaN(amount) || amount <= 0 || !date) {
+        alert('Veuillez remplir tous les champs correctement.');
+        return;
+    }
 
     const expenseDate = new Date(date);
 
@@ -521,16 +609,18 @@ function addNewExpense(event) {
     document.getElementById('expenseForm').reset();
     document.getElementById('expenseDate').value = new Date().toISOString().split('T')[0];
 
-    showNotification('💸 Dépense ajoutée avec succès !');
+    showNotification('Dépense ajoutée avec succès !');
 }
 
 function deleteExpense(expenseId) {
-    if (confirm('Êtes-vous sûr de vouloir supprimer cette dépense ?')) {
-        appData.expenses = appData.expenses.filter(e => e.id !== expenseId);
-        saveData();
-        refreshAllDisplays();
-        showNotification('🗑️ Dépense supprimée');
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette dépense ?')) {
+        return;
     }
+
+    appData.expenses = appData.expenses.filter(e => e.id !== expenseId);
+    saveData();
+    refreshAllDisplays();
+    showNotification('Dépense supprimée');
 }
 
 // Changer de mois dans la comptabilité
@@ -540,7 +630,7 @@ function changeMonth() {
     updateAccountingDisplays();
 }
 
-// Calcul des salaires des professeurs
+// Calcul des salaires des professeurs - CORRIGÉ
 function calculateTeacherSalaries(month, year) {
     let totalSalaries = 0;
 
@@ -548,46 +638,111 @@ function calculateTeacherSalaries(month, year) {
         p.month === month &&
         p.year === year &&
         p.status === 'paid' &&
-        p.type !== 'inscription'
+        p.type === 'monthly' // Seulement les mensualités, pas les inscriptions ni les produits
     );
 
     paidPayments.forEach(payment => {
         const student = appData.students.find(s => s.id === payment.studentId);
-        if (student) {
-            let teacherRate = 0;
+        if (student && student.assignedTeacher) {
+            const teacherRate = TEACHER_RATES[student.formula] || 0;
 
-            if (student.formula === 'groupe_2h' || student.formula === 'groupe_1h' || student.formula === 'duo') {
-                teacherRate = 5;
-            } else if (student.formula === 'individuel') {
-                teacherRate = 6;
-            }
-
-            let hoursTeached = 0;
+            // Calcul basé sur le nombre d'heures réelles enseignées
+            let hoursPerWeek = 0;
             if (student.formula === 'groupe_2h') {
-                hoursTeached = selectedDaysCount(student) || 2;
+                hoursPerWeek = student.courseDays.length * PRICING.groupe_2h.hours;
             } else if (student.formula === 'groupe_1h') {
-                hoursTeached = selectedDaysCount(student) || 1;
+                hoursPerWeek = student.courseDays.length * PRICING.groupe_1h.hours;
             } else {
-                hoursTeached = student.hours || 1;
+                hoursPerWeek = student.courseDays.length * student.hours;
             }
 
-            const coursesInPayment = payment.amount / (teacherRate * hoursTeached);
-            totalSalaries += coursesInPayment * hoursTeached * teacherRate;
+            // 4 semaines par mois
+            const monthlyHours = hoursPerWeek * 4;
+            const teacherPayment = monthlyHours * teacherRate;
+
+            totalSalaries += teacherPayment;
         }
     });
 
     return Math.round(totalSalaries * 100) / 100;
 }
 
-function selectedDaysCount(student) {
-    return student.courseDays ? student.courseDays.length : 0;
+// Synchronisation avec le serveur
+async function saveData() {
+    try {
+        const docRef = db.collection('institut_data').doc('main_data');
+        await docRef.set({
+            ...appData,
+            lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        updateSyncStatus('Synchronisé ✅', '#28a745');
+        console.log('Données sauvegardées dans Firebase');
+    } catch (error) {
+        console.error('Erreur de sauvegarde Firebase:', error);
+        updateSyncStatus('Erreur sync ❌', '#dc3545');
+        showNotification('Erreur de synchronisation');
+    }
 }
 
-// Synchronisation
-async function syncWithServer() {
-    await saveData();
+// Chargement des données stockées
+async function loadStoredData() {
+    try {
+        updateSyncStatus('Chargement...');
+
+        const docRef = db.collection('institut_data').doc('main_data');
+        const doc = await docRef.get();
+
+        if (doc.exists) {
+            const data = doc.data();
+            appData = {
+                students: data.students || [],
+                teachers: data.teachers || [],
+                payments: data.payments || [],
+                products: data.products || [],
+                sales: data.sales || [],
+                expenses: data.expenses || [],
+                teacherPayments: data.teacherPayments || [],
+                monthlyData: data.monthlyData || {}
+            };
+            console.log('Données chargées depuis Firebase:', appData);
+            updateSyncStatus('Synchronisé ✅', '#28a745');
+        } else {
+            // Initialiser avec des données vides
+            appData = {
+                students: [],
+                teachers: [],
+                payments: [],
+                products: [],
+                sales: [],
+                expenses: [],
+                teacherPayments: [],
+                monthlyData: {}
+            };
+            console.log('Nouveau document Firebase - données initialisées');
+            updateSyncStatus('Nouveau ✨', '#007bff');
+        }
+    } catch (error) {
+        console.error('Erreur de chargement Firebase:', error);
+        updateSyncStatus('Hors-ligne ⚠️', '#ffa500');
+
+        // Initialiser avec des données vides en cas d'erreur
+        appData = {
+            students: [],
+            teachers: [],
+            payments: [],
+            products: [],
+            sales: [],
+            expenses: [],
+            teacherPayments: [],
+            monthlyData: {}
+        };
+
+        showNotification('Mode hors-ligne - vérifiez votre connexion');
+    }
 }
 
+// Configuration de l'écoute en temps réel (optionnel)
 function setupRealtimeListener() {
     const docRef = db.collection('institut_data').doc('main_data');
 
@@ -656,10 +811,10 @@ async function downloadMonthlyBackup() {
         link.click();
         URL.revokeObjectURL(url);
 
-        showNotification('📥 Sauvegarde du mois téléchargée !');
+        showNotification('Sauvegarde du mois téléchargée !');
     } catch (error) {
         console.error('Erreur export:', error);
-        showNotification('❌ Erreur lors de l\'export');
+        showNotification('Erreur lors de l\'export');
     }
 }
 
@@ -669,6 +824,7 @@ function togglePaymentStatus(paymentId) {
     if (payment) {
         payment.status = payment.status === 'paid' ? 'unpaid' : 'paid';
 
+        // Synchroniser avec les ventes si c'est un produit
         const sale = appData.sales.find(s => s.studentId === payment.studentId && s.productName === payment.productName);
         if (sale) {
             sale.status = payment.status;
@@ -676,7 +832,7 @@ function togglePaymentStatus(paymentId) {
 
         saveData();
         refreshAllDisplays();
-        showNotification(`💰 Paiement ${payment.status === 'paid' ? 'marqué comme payé' : 'marqué comme non payé'}`);
+        showNotification(`Paiement ${payment.status === 'paid' ? 'marqué comme payé' : 'marqué comme non payé'}`);
     }
 }
 
@@ -696,8 +852,11 @@ function refreshAllDisplays() {
 
 // Mise à jour des affichages comptables
 function updateAccountingDisplays() {
-    document.getElementById('monthSelector').value = currentMonth;
-    document.getElementById('yearSelector').value = currentYear;
+    const monthSelector = document.getElementById('monthSelector');
+    const yearSelector = document.getElementById('yearSelector');
+
+    if (monthSelector) monthSelector.value = currentMonth;
+    if (yearSelector) yearSelector.value = currentYear;
 
     const monthPayments = appData.payments.filter(p =>
         p.month === currentMonth && p.year === currentYear && p.status === 'paid'
@@ -712,11 +871,16 @@ function updateAccountingDisplays() {
     const teacherSalaries = calculateTeacherSalaries(currentMonth, currentYear);
     const netProfit = totalIncome - totalExpenses - teacherSalaries;
 
-    document.getElementById('totalIncome').textContent = `${totalIncome}€`;
-    document.getElementById('totalExpenses').textContent = `${totalExpenses}€`;
-    document.getElementById('totalTeacherSalaries').textContent = `${teacherSalaries}€`;
-    document.getElementById('netProfit').textContent = `${netProfit}€`;
-    document.getElementById('netProfit').style.color = netProfit >= 0 ? '#28a745' : '#dc3545';
+    // Mise à jour sécurisée des éléments DOM
+    updateElementText('totalIncome', `${totalIncome}€`);
+    updateElementText('totalExpenses', `${totalExpenses}€`);
+    updateElementText('totalTeacherSalaries', `${teacherSalaries}€`);
+
+    const netProfitElement = document.getElementById('netProfit');
+    if (netProfitElement) {
+        netProfitElement.textContent = `${netProfit}€`;
+        netProfitElement.style.color = netProfit >= 0 ? '#28a745' : '#dc3545';
+    }
 
     updateExpensesList();
 }
@@ -730,7 +894,9 @@ function updateExpensesList() {
         e.month === currentMonth && e.year === currentYear
     );
 
-    countElement.textContent = monthExpenses.length;
+    if (countElement) countElement.textContent = monthExpenses.length;
+
+    if (!container) return;
 
     if (monthExpenses.length === 0) {
         container.innerHTML = `
@@ -747,7 +913,7 @@ function updateExpensesList() {
     container.innerHTML = sortedExpenses.map(expense => `
         <div class="table-row">
             <div class="row-content">
-                <strong>${expense.description}</strong><br>
+                <strong>${escapeHtml(expense.description)}</strong><br>
                 <small>💰 ${expense.amount}€ | 📅 ${formatDate(expense.date)}</small>
             </div>
             <div class="row-actions">
@@ -775,10 +941,10 @@ function updateStats() {
         .filter(p => p.status === 'unpaid')
         .reduce((sum, p) => sum + p.amount, 0);
 
-    document.getElementById('totalStudents').textContent = appData.students.length;
-    document.getElementById('totalTeachers').textContent = appData.teachers.length;
-    document.getElementById('monthlyRevenue').textContent = `${monthlyRevenue}€`;
-    document.getElementById('pendingPayments').textContent = `${pendingPayments}€`;
+    updateElementText('totalStudents', appData.students.length);
+    updateElementText('totalTeachers', appData.teachers.length);
+    updateElementText('monthlyRevenue', `${monthlyRevenue}€`);
+    updateElementText('pendingPayments', `${pendingPayments}€`);
 }
 
 // Mise à jour de la liste des élèves
@@ -786,7 +952,8 @@ function updateStudentsList() {
     const container = document.getElementById('studentsListContainer');
     const countElement = document.getElementById('studentsCount');
 
-    countElement.textContent = appData.students.length;
+    if (countElement) countElement.textContent = appData.students.length;
+    if (!container) return;
 
     if (appData.students.length === 0) {
         container.innerHTML = `
@@ -808,14 +975,15 @@ function updateStudentsList() {
         }
 
         const inscriptionInfo = student.inscriptionType === 'renewal' ? '🔄' : '🆕';
+        const courseDaysText = student.courseDays ? student.courseDays.map(d => d.text).join(', ') : '';
 
         return `
             <div class="table-row">
                 <div class="row-content">
-                    <strong>${student.firstName} ${student.lastName}</strong> ${inscriptionInfo}<br>
-                    <small>📞 ${student.phone || 'Non renseigné'}</small><br>
-                    <small>📚 ${getFormulaText(student.formula)} | 👨‍🏫 ${teacherName}</small><br>
-                    <small>📅 ${student.courseDays.map(d => d.text).join(', ')} | 💰 ${priceInfo}</small>
+                    <strong>${escapeHtml(student.firstName)} ${escapeHtml(student.lastName)}</strong> ${inscriptionInfo}<br>
+                    <small>📞 ${escapeHtml(student.phone || 'Non renseigné')}</small><br>
+                    <small>📚 ${getFormulaText(student.formula)} | 👨‍🏫 ${escapeHtml(teacherName)}</small><br>
+                    <small>📅 ${courseDaysText} | 💰 ${priceInfo}</small>
                 </div>
                 <div class="row-actions">
                     <button class="btn btn-danger" onclick="deleteStudent(${student.id})">🗑️</button>
@@ -830,7 +998,8 @@ function updateTeachersList() {
     const container = document.getElementById('teachersListContainer');
     const countElement = document.getElementById('teachersCount');
 
-    countElement.textContent = appData.teachers.length;
+    if (countElement) countElement.textContent = appData.teachers.length;
+    if (!container) return;
 
     if (appData.teachers.length === 0) {
         container.innerHTML = `
@@ -845,8 +1014,8 @@ function updateTeachersList() {
     container.innerHTML = appData.teachers.map(teacher => `
         <div class="table-row">
             <div class="row-content">
-                <strong>${teacher.firstName} ${teacher.lastName}</strong><br>
-                <small>📚 Spécialité: ${teacher.specialty}</small>
+                <strong>${escapeHtml(teacher.firstName)} ${escapeHtml(teacher.lastName)}</strong><br>
+                <small>📚 Spécialité: ${escapeHtml(teacher.specialty)}</small>
             </div>
             <div class="row-actions">
                 <button class="btn btn-danger" onclick="deleteTeacher(${teacher.id})">🗑️</button>
@@ -860,7 +1029,8 @@ function updateProductsList() {
     const container = document.getElementById('productsListContainer');
     const countElement = document.getElementById('productsCount');
 
-    countElement.textContent = appData.products.length;
+    if (countElement) countElement.textContent = appData.products.length;
+    if (!container) return;
 
     if (appData.products.length === 0) {
         container.innerHTML = `
@@ -875,9 +1045,9 @@ function updateProductsList() {
     container.innerHTML = appData.products.map(product => `
         <div class="table-row">
             <div class="row-content">
-                <strong>${product.name}</strong><br>
+                <strong>${escapeHtml(product.name)}</strong><br>
                 <small>💰 ${product.price}€</small><br>
-                ${product.description ? `<small>📋 ${product.description}</small>` : ''}
+                ${product.description ? `<small>📋 ${escapeHtml(product.description)}</small>` : ''}
             </div>
             <div class="row-actions">
                 <button class="btn btn-danger" onclick="deleteProduct(${product.id})">🗑️</button>
@@ -891,7 +1061,8 @@ function updateSalesList() {
     const container = document.getElementById('salesListContainer');
     const countElement = document.getElementById('salesCount');
 
-    countElement.textContent = appData.sales.length;
+    if (countElement) countElement.textContent = appData.sales.length;
+    if (!container) return;
 
     if (appData.sales.length === 0) {
         container.innerHTML = `
@@ -908,8 +1079,8 @@ function updateSalesList() {
     container.innerHTML = sortedSales.map(sale => `
         <div class="table-row">
             <div class="row-content">
-                <strong>${sale.studentName}</strong><br>
-                <small>📦 ${sale.productName} x${sale.quantity} | 💰 ${sale.totalAmount}€</small><br>
+                <strong>${escapeHtml(sale.studentName)}</strong><br>
+                <small>📦 ${escapeHtml(sale.productName)} x${sale.quantity} | 💰 ${sale.totalAmount}€</small><br>
                 <small>📅 ${formatDate(sale.date)} | ${sale.unitPrice}€/unité</small>
             </div>
             <div class="row-actions">
@@ -924,6 +1095,8 @@ function updateSalesList() {
 // Mise à jour de la liste des paiements
 function updatePaymentsList() {
     const container = document.getElementById('paymentsListContainer');
+    if (!container) return;
+
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
@@ -937,10 +1110,10 @@ function updatePaymentsList() {
     const totalPending = currentMonthPayments.filter(p => p.status === 'unpaid').reduce((sum, p) => sum + p.amount, 0);
     const totalInscription = currentMonthPayments.filter(p => p.type === 'inscription' && p.status === 'paid').reduce((sum, p) => sum + p.amount, 0);
 
-    document.getElementById('totalExpectedAmount').textContent = `${totalExpected}€`;
-    document.getElementById('totalReceivedAmount').textContent = `${totalReceived}€`;
-    document.getElementById('totalPendingAmount').textContent = `${totalPending}€`;
-    document.getElementById('totalInscriptionAmount').textContent = `${totalInscription}€`;
+    updateElementText('totalExpectedAmount', `${totalExpected}€`);
+    updateElementText('totalReceivedAmount', `${totalReceived}€`);
+    updateElementText('totalPendingAmount', `${totalPending}€`);
+    updateElementText('totalInscriptionAmount', `${totalInscription}€`);
 
     if (currentMonthPayments.length === 0) {
         container.innerHTML = `
@@ -959,18 +1132,18 @@ function updatePaymentsList() {
         } else if (payment.type === 'monthly') {
             paymentTypeText = '📅 Mensualité';
         } else if (payment.type === 'product') {
-            paymentTypeText = `📦 ${payment.productName}`;
+            paymentTypeText = `📦 ${escapeHtml(payment.productName || '')}`;
         }
 
         return `
             <div class="table-row">
                 <div class="row-content">
-                    <strong>${payment.studentName}</strong><br>
+                    <strong>${escapeHtml(payment.studentName)}</strong><br>
                     <small>${paymentTypeText} | 💰 ${payment.amount}€</small><br>
                     <small>📅 Échéance: ${formatDate(payment.dueDate)}</small>
                 </div>
                 <div class="row-actions">
-                    <span class="status-${payment.status}" onclick="togglePaymentStatus(${payment.id})">
+                    <span class="status-${payment.status}" onclick="togglePaymentStatus(${payment.id})" style="cursor: pointer;">
                         ${payment.status === 'paid' ? '✅ Payé' : '❌ Non payé'}
                     </span>
                 </div>
@@ -982,11 +1155,13 @@ function updatePaymentsList() {
 // Mise à jour des dropdowns
 function updateTeachersDropdown() {
     const select = document.getElementById('assignedTeacher');
+    if (!select) return;
+
     const currentValue = select.value;
 
     select.innerHTML = '<option value="">-- Sélectionnez un professeur --</option>' +
         appData.teachers.map(teacher =>
-            `<option value="${teacher.id}">${teacher.firstName} ${teacher.lastName}</option>`
+            `<option value="${teacher.id}">${escapeHtml(teacher.firstName)} ${escapeHtml(teacher.lastName)}</option>`
         ).join('');
 
     select.value = currentValue;
@@ -994,11 +1169,13 @@ function updateTeachersDropdown() {
 
 function updateStudentsDropdown() {
     const select = document.getElementById('saleStudentSelect');
+    if (!select) return;
+
     const currentValue = select.value;
 
     select.innerHTML = '<option value="">-- Sélectionnez un élève --</option>' +
         appData.students.map(student =>
-            `<option value="${student.id}">${student.firstName} ${student.lastName}</option>`
+            `<option value="${student.id}">${escapeHtml(student.firstName)} ${escapeHtml(student.lastName)}</option>`
         ).join('');
 
     select.value = currentValue;
@@ -1006,11 +1183,13 @@ function updateStudentsDropdown() {
 
 function updateProductsDropdown() {
     const select = document.getElementById('saleProductSelect');
+    if (!select) return;
+
     const currentValue = select.value;
 
     select.innerHTML = '<option value="">-- Sélectionnez un produit --</option>' +
         appData.products.map(product =>
-            `<option value="${product.id}">${product.name} - ${product.price}€</option>`
+            `<option value="${product.id}">${escapeHtml(product.name)} - ${product.price}€</option>`
         ).join('');
 
     select.value = currentValue;
@@ -1055,6 +1234,7 @@ function getFormulaText(formula) {
 }
 
 function formatDate(dateString) {
+    if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleDateString('fr-FR');
 }
@@ -1076,81 +1256,29 @@ function showNotification(message) {
     }, 3000);
 }
 
-// Sauvegarde et chargement - UNIQUEMENT FIREBASE
-async function saveData() {
-    try {
-        const docRef = db.collection('institut_data').doc('main_data');
-        await docRef.set({
-            ...appData,
-            lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        document.getElementById('syncStatus').textContent = 'Synchronisé ✅';
-        document.getElementById('syncStatus').style.color = '#28a745';
-        console.log('Données sauvegardées dans Firebase');
-    } catch (error) {
-        console.error('Erreur de sauvegarde Firebase:', error);
-        document.getElementById('syncStatus').textContent = 'Erreur sync ❌';
-        document.getElementById('syncStatus').style.color = '#dc3545';
-        showNotification('❌ Erreur de synchronisation');
+// Fonction utilitaire pour la mise à jour sécurisée des éléments DOM
+function updateElementText(elementId, text) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.textContent = text;
     }
 }
 
-async function loadStoredData() {
-    try {
-        document.getElementById('syncStatus').textContent = 'Chargement...';
+// Fonction utilitaire pour échapper le HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
-        const docRef = db.collection('institut_data').doc('main_data');
-        const doc = await docRef.get();
-
-        if (doc.exists) {
-            const data = doc.data();
-            appData = {
-                students: data.students || [],
-                teachers: data.teachers || [],
-                payments: data.payments || [],
-                products: data.products || [],
-                sales: data.sales || [],
-                expenses: data.expenses || [],
-                teacherPayments: data.teacherPayments || [],
-                monthlyData: data.monthlyData || {}
-            };
-            console.log('Données chargées depuis Firebase:', appData);
-            document.getElementById('syncStatus').textContent = 'Synchronisé ✅';
-            document.getElementById('syncStatus').style.color = '#28a745';
-        } else {
-            // Initialiser avec des données vides si pas de document Firebase
-            appData = {
-                students: [],
-                teachers: [],
-                payments: [],
-                products: [],
-                sales: [],
-                expenses: [],
-                teacherPayments: [],
-                monthlyData: {}
-            };
-            console.log('Nouveau document Firebase - données initialisées');
-            document.getElementById('syncStatus').textContent = 'Nouveau ✨';
-            document.getElementById('syncStatus').style.color = '#007bff';
+// Fonction utilitaire pour la mise à jour du statut de synchronisation
+function updateSyncStatus(message, color = null) {
+    const statusElement = document.getElementById('syncStatus');
+    if (statusElement) {
+        statusElement.textContent = message;
+        if (color) {
+            statusElement.style.color = color;
         }
-    } catch (error) {
-        console.error('Erreur de chargement Firebase:', error);
-        document.getElementById('syncStatus').textContent = 'Hors-ligne ⚠️';
-        document.getElementById('syncStatus').style.color = '#ffa500';
-
-        // Initialiser avec des données vides en cas d'erreur
-        appData = {
-            students: [],
-            teachers: [],
-            payments: [],
-            products: [],
-            sales: [],
-            expenses: [],
-            teacherPayments: [],
-            monthlyData: {}
-        };
-
-        showNotification('⚠️ Mode hors-ligne - vérifiez votre connexion');
     }
 }
